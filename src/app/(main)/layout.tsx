@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/hooks/use-user";
 import { useTheme } from "next-themes";
 import {
   Home,
@@ -50,10 +51,21 @@ export default function MainLayout({
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+  const { profile, loading } = useUser();
 
-  // TODO: Replace with real user data from Supabase auth
-  const currentUser: { name: string; role: string } = { name: "User", role: "member" };
+  const currentUser = {
+    name: profile?.name ?? "User",
+    role: profile?.role ?? "member",
+  };
   const isOrganiser = currentUser.role === "organiser";
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   const navLinkClass = (href: string) => {
     const isActive =
