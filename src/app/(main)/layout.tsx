@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { useTheme } from "next-themes";
 import {
   Home,
@@ -181,8 +182,9 @@ export default function MainLayout({
               variant="ghost"
               size="sm"
               className="text-muted-foreground hover:text-destructive"
-              onClick={() => {
-                // TODO: Implement Supabase signout
+              onClick={async () => {
+                const supabase = createClient();
+                await supabase.auth.signOut();
                 router.push("/login");
               }}
             >
