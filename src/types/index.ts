@@ -107,7 +107,6 @@ export type Database = {
           id: string
           name: string
           open_mic_enabled: boolean
-          setlist_id: string | null
           slug: string
           start_time: string
           updated_at: string
@@ -122,7 +121,6 @@ export type Database = {
           id?: string
           name: string
           open_mic_enabled?: boolean
-          setlist_id?: string | null
           slug: string
           start_time: string
           updated_at?: string
@@ -137,7 +135,6 @@ export type Database = {
           id?: string
           name?: string
           open_mic_enabled?: boolean
-          setlist_id?: string | null
           slug?: string
           start_time?: string
           updated_at?: string
@@ -149,13 +146,6 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_events_setlist"
-            columns: ["setlist_id"]
-            isOneToOne: false
-            referencedRelation: "setlists"
             referencedColumns: ["id"]
           },
         ]

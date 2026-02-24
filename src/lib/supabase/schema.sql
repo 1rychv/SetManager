@@ -33,7 +33,6 @@ CREATE TABLE events (
   description TEXT NOT NULL DEFAULT '',
   open_mic_enabled BOOLEAN NOT NULL DEFAULT false,
   slug TEXT NOT NULL UNIQUE,
-  setlist_id UUID,
   created_by UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -60,11 +59,6 @@ CREATE TABLE setlists (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- Add foreign key from events to setlists (circular reference, added after both tables exist)
-ALTER TABLE events
-  ADD CONSTRAINT fk_events_setlist
-  FOREIGN KEY (setlist_id) REFERENCES setlists(id) ON DELETE SET NULL;
 
 -- Songs
 CREATE TABLE songs (

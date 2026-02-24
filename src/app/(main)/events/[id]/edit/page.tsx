@@ -75,7 +75,10 @@ export default function EditEventPage() {
       setError(result.error);
       toast.error(result.error);
       setLoading(false);
+      return;
     }
+
+    router.push(`/events/${id}`);
   }
 
   const copyPublicLink = () => {

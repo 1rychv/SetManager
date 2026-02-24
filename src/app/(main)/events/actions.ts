@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { RSVPStatus } from "@/types";
 
@@ -52,7 +51,7 @@ export async function createEvent(formData: FormData) {
     return { error: error.message };
   }
 
-  redirect("/events");
+  return { success: true };
 }
 
 export async function updateEvent(formData: FormData) {
@@ -88,7 +87,7 @@ export async function updateEvent(formData: FormData) {
     return { error: error.message };
   }
 
-  redirect(`/events/${id}`);
+  return { success: true, id };
 }
 
 export async function updateRSVP(eventId: string, status: RSVPStatus) {

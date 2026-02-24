@@ -39,7 +39,10 @@ export default function NewEventPage() {
       setError(result.error);
       toast.error(result.error);
       setLoading(false);
+      return;
     }
+
+    router.push("/events");
   }
 
   const copyPublicLink = () => {

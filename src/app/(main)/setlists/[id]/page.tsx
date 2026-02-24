@@ -285,7 +285,9 @@ export default function SetlistDetailPage({
   }
 
   async function handleDeleteSetlist() {
-    await deleteSetlist(setlistId);
+    const result = await deleteSetlist(setlistId);
+    if (result?.error) return;
+    router.push("/setlists");
   }
 
   // ─── Role handlers ───
@@ -400,18 +402,18 @@ export default function SetlistDetailPage({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="px-4 md:px-6 py-4 border-b border-border space-y-3">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.push("/setlists")}>
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.push("/setlists")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div>
+          <div className="flex-1 min-w-0">
             {editingTitle && isOrganiser ? (
               <div className="flex items-center gap-2">
                 <Input
                   value={titleValue}
                   onChange={(e) => setTitleValue(e.target.value)}
-                  className="h-8 text-lg font-semibold w-56"
+                  className="h-8 text-lg font-semibold flex-1"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleRenameSetlist();
@@ -421,13 +423,13 @@ export default function SetlistDetailPage({
                     }
                   }}
                 />
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleRenameSetlist}>
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleRenameSetlist}>
                   <Check className="w-4 h-4" />
                 </Button>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-7 w-7"
+                  className="h-7 w-7 shrink-0"
                   onClick={() => {
                     setTitleValue(setlistName);
                     setEditingTitle(false);
@@ -438,12 +440,12 @@ export default function SetlistDetailPage({
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold">{setlistName}</h1>
+                <h1 className="text-lg font-semibold truncate">{setlistName}</h1>
                 {isOrganiser && (
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-7 w-7"
+                    className="h-7 w-7 shrink-0"
                     onClick={() => setEditingTitle(true)}
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -456,8 +458,8 @@ export default function SetlistDetailPage({
               {eventName && (
                 <>
                   <span>·</span>
-                  <span className="flex items-center gap-1">
-                    <CalendarDays className="w-3 h-3" />
+                  <span className="flex items-center gap-1 truncate">
+                    <CalendarDays className="w-3 h-3 shrink-0" />
                     {eventName}
                   </span>
                 </>
@@ -465,43 +467,43 @@ export default function SetlistDetailPage({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {isOrganiser && (
-            <>
-              {eventId ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDetachEvent}
-                >
-                  <Unlink className="w-4 h-4 mr-1" />
-                  Detach
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openAttachDialog}
-                >
-                  <Link2 className="w-4 h-4 mr-1" />
-                  Attach to Event
-                </Button>
-              )}
-              <Button size="sm" onClick={() => setAddDialogOpen(true)}>
-                <Plus className="w-4 h-4 mr-1" />
-                Add Song
-              </Button>
+        {isOrganiser && (
+          <div className="flex items-center gap-2 overflow-x-auto pl-11 md:pl-11">
+            {eventId ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setDeleteDialogOpen(true)}
+                className="shrink-0"
+                onClick={handleDetachEvent}
               >
-                <Trash2 className="w-4 h-4" />
+                <Unlink className="w-4 h-4 mr-1" />
+                Detach
               </Button>
-            </>
-          )}
-        </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={openAttachDialog}
+              >
+                <Link2 className="w-4 h-4 mr-1" />
+                Attach to Event
+              </Button>
+            )}
+            <Button size="sm" className="shrink-0" onClick={() => setAddDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add Song
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive shrink-0"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Two-panel layout */}

@@ -41,6 +41,7 @@ export default function SetlistsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
   const isOrganiser = profile?.role === "organiser";
 
@@ -49,7 +50,7 @@ export default function SetlistsPage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("setlists")
-        .select("id, name, event_id, created_at, songs(count), events(name)")
+        .select("id, name, event_id, created_at, songs(count), events!setlists_event_id_fkey(name)")
         .order("created_at", { ascending: false });
 
       setSetlists((data as unknown as SetlistRow[]) ?? []);
@@ -61,9 +62,20 @@ export default function SetlistsPage() {
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreating(true);
+    setError("");
     const formData = new FormData(e.currentTarget);
-    await createSetlist(formData);
-    setCreating(false);
+    const result = await createSetlist(formData);
+
+    if (result?.error) {
+      setError(result.error);
+      setCreating(false);
+      return;
+    }
+
+    if (result?.data?.id) {
+      setDialogOpen(false);
+      router.push(`/setlists/${result.data.id}`);
+    }
   }
 
   if (loading) {
@@ -173,6 +185,9 @@ export default function SetlistsPage() {
                   autoFocus
                 />
               </div>
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
             </div>
             <DialogFooter>
               <Button

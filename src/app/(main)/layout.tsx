@@ -228,29 +228,6 @@ export default function MainLayout({
 
         {/* Page content */}
         <main className="flex-1 overflow-auto">{children}</main>
-
-        {/* Bottom tab bar - Mobile */}
-        <nav className="md:hidden flex items-center justify-around border-t bg-background h-16 shrink-0 px-1">
-          {navItems.slice(0, 5).map((item) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg min-w-[56px] ${
-                  isActive ? "text-primary" : "text-muted-foreground"
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="text-[10px]">
-                  {item.label.length > 8
-                    ? item.label.slice(0, 8) + "."
-                    : item.label}
-                </span>
-              </Link>
-            );
-          })}
-        </nav>
       </div>
     </div>
   );

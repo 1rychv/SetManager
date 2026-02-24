@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 // ─── Setlist CRUD ───
@@ -31,7 +30,7 @@ export async function createSetlist(formData: FormData) {
     return { error: error.message };
   }
 
-  redirect(`/setlists/${data.id}`);
+  return { data: { id: data.id } };
 }
 
 export async function updateSetlist(
@@ -61,7 +60,7 @@ export async function deleteSetlist(id: string) {
     return { error: error.message };
   }
 
-  redirect("/setlists");
+  return { success: true };
 }
 
 // ─── Song CRUD ───
