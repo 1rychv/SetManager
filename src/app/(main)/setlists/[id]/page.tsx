@@ -12,7 +12,24 @@ import {
   Users,
   ArrowLeft,
   MicVocal,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
 import { Button } from "@/components/ui/button";
@@ -50,6 +67,7 @@ import {
   addSong,
   updateSong,
   removeSong,
+  reorderSongs,
   deleteSetlist,
   updateSetlist,
   addSongRole,
@@ -122,6 +140,12 @@ export default function SetlistDetailPage({
   const selectedSong = songs.find((s) => s.id === selectedSongId) ?? null;
   const openMicSongs = songs.filter((s) => s.is_open_mic);
   const regularSongs = songs.filter((s) => !s.is_open_mic);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const loadSetlist = useCallback(
     async (id: string) => {
@@ -277,6 +301,37 @@ export default function SetlistDetailPage({
     }
   }
 
+  // ─── Drag & drop handler ───
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    // Work on the currently displayed list (regular songs only — open mic stays separate)
+    const currentList = [...regularSongs];
+    const oldIndex = currentList.findIndex((s) => s.id === active.id);
+    const newIndex = currentList.findIndex((s) => s.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Optimistic reorder in local state
+    const [moved] = currentList.splice(oldIndex, 1);
+    currentList.splice(newIndex, 0, moved);
+
+    // Rebuild the full song list with updated positions
+    const reordered = currentList.map((s, i) => ({ ...s, position: i + 1 }));
+    const newSongs = [...reordered, ...openMicSongs];
+    setSongs(newSongs);
+
+    // Persist to database
+    const updates = reordered.map((s) => ({ id: s.id, position: s.position }));
+    const result = await reorderSongs(updates);
+    if (result.error) {
+      toast.error(result.error);
+      loadSetlist(setlistId); // revert on failure
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6">
@@ -409,6 +464,31 @@ export default function SetlistDetailPage({
                     </Button>
                   )}
                 </div>
+              ) : isOrganiser ? (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={regularSongs.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="p-2">
+                      {regularSongs.map((song, index) => (
+                        <SortableSongCard
+                          key={song.id}
+                          song={song}
+                          index={index + 1}
+                          isSelected={selectedSongId === song.id}
+                          isOrganiser={isOrganiser}
+                          onSelect={() => setSelectedSongId(song.id)}
+                          onDelete={() => handleRemoveSong(song.id)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               ) : (
                 <div className="p-2">
                   {regularSongs.map((song, index) => (
@@ -615,32 +695,37 @@ export default function SetlistDetailPage({
 
 // ─── Song Card (left panel) ───
 
-function SongCard({
-  song,
-  index,
-  isSelected,
-  isOrganiser,
-  onSelect,
-  onDelete,
-}: {
+interface SongCardProps {
   song: SongWithRoles;
   index: number;
   isSelected: boolean;
   isOrganiser: boolean;
   onSelect: () => void;
   onDelete: () => void;
-}) {
+}
+
+function SongCardContent({
+  song,
+  index,
+  isSelected,
+  isOrganiser,
+  onSelect,
+  onDelete,
+  dragHandle,
+}: SongCardProps & { dragHandle?: React.ReactNode }) {
   const roles = song.song_role_assignments ?? [];
 
   return (
     <div
       onClick={onSelect}
-      className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors mb-1 ${
+      className={`group flex items-center gap-2 p-3 rounded-lg cursor-pointer transition-colors mb-1 ${
         isSelected
           ? "border-l-3 border-l-primary bg-primary/5"
           : "hover:bg-muted/50"
       } ${song.is_open_mic ? "border-l-3 border-l-teal-500" : ""}`}
     >
+      {dragHandle}
+
       <span className="text-xs text-muted-foreground w-5 text-center shrink-0">
         {index}
       </span>
@@ -704,6 +789,47 @@ function SongCard({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function SongCard(props: SongCardProps) {
+  return <SongCardContent {...props} />;
+}
+
+// ─── Sortable Song Card (drag & drop) ───
+
+function SortableSongCard(props: SongCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.song.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: "relative" as const,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  const dragHandle = (
+    <button
+      className="touch-none shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="w-4 h-4" />
+    </button>
+  );
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SongCardContent {...props} dragHandle={dragHandle} />
     </div>
   );
 }
