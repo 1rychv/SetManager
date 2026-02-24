@@ -156,7 +156,9 @@ export type Database = {
           event_id: string | null
           id: string
           name: string
+          setlist_id: string | null
           size: string
+          song_id: string | null
           storage_path: string
           type: Database["public"]["Enums"]["file_type"]
           uploader_id: string
@@ -166,7 +168,9 @@ export type Database = {
           event_id?: string | null
           id?: string
           name: string
+          setlist_id?: string | null
           size: string
+          song_id?: string | null
           storage_path: string
           type: Database["public"]["Enums"]["file_type"]
           uploader_id: string
@@ -176,7 +180,9 @@ export type Database = {
           event_id?: string | null
           id?: string
           name?: string
+          setlist_id?: string | null
           size?: string
+          song_id?: string | null
           storage_path?: string
           type?: Database["public"]["Enums"]["file_type"]
           uploader_id?: string
@@ -187,6 +193,20 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_setlist_id_fkey"
+            columns: ["setlist_id"]
+            isOneToOne: false
+            referencedRelation: "setlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
             referencedColumns: ["id"]
           },
           {

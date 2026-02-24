@@ -16,6 +16,11 @@ import {
   CalendarDays,
   Link2,
   Unlink,
+  FileText,
+  Image,
+  Music,
+  Download,
+  Paperclip,
 } from "lucide-react";
 import {
   DndContext,
@@ -76,7 +81,13 @@ import {
   removeSongRole,
   addOpenMicSong,
 } from "../actions";
-import type { SongWithRoles, SongRoleAssignment, EventMemberWithProfile, Event, OpenMicApplication } from "@/types";
+import {
+  attachFileToSong,
+  detachFileFromSong,
+  attachFileToSetlist,
+  detachFileFromSetlist,
+} from "../../files/actions";
+import type { SongWithRoles, SongRoleAssignment, EventMemberWithProfile, Event, OpenMicApplication, FileRecord } from "@/types";
 
 // ─── Key color mapping ───
 
@@ -142,6 +153,10 @@ export default function SetlistDetailPage({
   const [titleValue, setTitleValue] = useState("");
   const [addPerformerOpen, setAddPerformerOpen] = useState(false);
   const [approvedApps, setApprovedApps] = useState<OpenMicApplication[]>([]);
+  const [songFiles, setSongFiles] = useState<FileRecord[]>([]);
+  const [setlistFiles, setSetlistFiles] = useState<FileRecord[]>([]);
+  const [attachFileDialogOpen, setAttachFileDialogOpen] = useState<"song" | "setlist" | null>(null);
+  const [availableFiles, setAvailableFiles] = useState<FileRecord[]>([]);
 
   const isOrganiser = profile?.role === "organiser";
   const selectedSong = songs.find((s) => s.id === selectedSongId) ?? null;
@@ -199,10 +214,30 @@ export default function SetlistDetailPage({
         .order("position", { ascending: true });
 
       setSongs((songsData as SongWithRoles[]) ?? []);
+
+      // Load setlist-level files
+      const { data: setlistFilesData } = await supabase
+        .from("files")
+        .select("*")
+        .eq("setlist_id", id)
+        .order("created_at", { ascending: false });
+
+      setSetlistFiles((setlistFilesData as FileRecord[]) ?? []);
       setLoading(false);
     },
     [router]
   );
+
+  const loadSongFiles = useCallback(async (songId: string) => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("files")
+      .select("*")
+      .eq("song_id", songId)
+      .order("created_at", { ascending: false });
+
+    setSongFiles((data as FileRecord[]) ?? []);
+  }, []);
 
   useEffect(() => {
     params.then(({ id }) => {
@@ -210,6 +245,15 @@ export default function SetlistDetailPage({
       loadSetlist(id);
     });
   }, [params, loadSetlist]);
+
+  // Load song files when selection changes
+  useEffect(() => {
+    if (selectedSongId) {
+      loadSongFiles(selectedSongId);
+    } else {
+      setSongFiles([]);
+    }
+  }, [selectedSongId, loadSongFiles]);
 
   // ─── Setlist name handlers ───
 
@@ -419,6 +463,89 @@ export default function SetlistDetailPage({
     }
   }
 
+  // ─── File attachment handlers ───
+
+  async function openAttachFileDialog(target: "song" | "setlist") {
+    const supabase = createClient();
+    // Get all files not already attached to this song/setlist
+    const { data } = await supabase
+      .from("files")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    const allFiles = (data as FileRecord[]) ?? [];
+
+    if (target === "song" && selectedSongId) {
+      // Filter out files already attached to this song
+      setAvailableFiles(allFiles.filter((f) => f.song_id !== selectedSongId));
+    } else {
+      // Filter out files already attached to this setlist
+      setAvailableFiles(allFiles.filter((f) => f.setlist_id !== setlistId));
+    }
+
+    setAttachFileDialogOpen(target);
+  }
+
+  async function handleAttachFileToSong(fileId: string) {
+    if (!selectedSongId) return;
+    const result = await attachFileToSong(fileId, selectedSongId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("File attached to song!");
+      setAttachFileDialogOpen(null);
+      loadSongFiles(selectedSongId);
+    }
+  }
+
+  async function handleDetachFileFromSong(fileId: string) {
+    const result = await detachFileFromSong(fileId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("File detached from song");
+      if (selectedSongId) loadSongFiles(selectedSongId);
+    }
+  }
+
+  async function handleAttachFileToSetlist(fileId: string) {
+    const result = await attachFileToSetlist(fileId, setlistId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("File attached to setlist!");
+      setAttachFileDialogOpen(null);
+      loadSetlist(setlistId);
+    }
+  }
+
+  async function handleDetachFileFromSetlist(fileId: string) {
+    const result = await detachFileFromSetlist(fileId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("File detached from setlist");
+      loadSetlist(setlistId);
+    }
+  }
+
+  async function handleDownloadFile(storagePath: string, fileName: string) {
+    const supabase = createClient();
+    const { data, error } = await supabase.storage
+      .from("files")
+      .createSignedUrl(storagePath, 60);
+
+    if (error || !data?.signedUrl) {
+      toast.error("Could not generate download link");
+      return;
+    }
+
+    const a = document.createElement("a");
+    a.href = data.signedUrl;
+    a.download = fileName;
+    a.click();
+  }
+
   if (loading) {
     return (
       <div className="p-4 md:p-8">
@@ -541,6 +668,55 @@ export default function SetlistDetailPage({
             </Button>
           </div>
         )}
+
+        {/* Setlist-level files */}
+        {(setlistFiles.length > 0 || isOrganiser) && (
+          <div className="flex items-center gap-2 overflow-x-auto pl-11 md:pl-11">
+            <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            {setlistFiles.length === 0 ? (
+              <span className="text-xs text-muted-foreground">No setlist files</span>
+            ) : (
+              setlistFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="group flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 shrink-0"
+                >
+                  {fileTypeIcon(file.type)}
+                  <span className="truncate max-w-[120px]">{file.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={() => handleDownloadFile(file.storage_path, file.name)}
+                  >
+                    <Download className="w-3 h-3" />
+                  </Button>
+                  {isOrganiser && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                      onClick={() => handleDetachFileFromSetlist(file.id)}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              ))
+            )}
+            {isOrganiser && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs shrink-0"
+                onClick={() => openAttachFileDialog("setlist")}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Attach File
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Two-panel layout */}
@@ -613,6 +789,7 @@ export default function SetlistDetailPage({
                 song={selectedSong}
                 isOrganiser={isOrganiser}
                 teamMembers={teamMembers}
+                files={songFiles}
                 onUpdate={(updates) =>
                   handleUpdateSong(selectedSong.id, updates)
                 }
@@ -620,6 +797,9 @@ export default function SetlistDetailPage({
                   handleAddRole(selectedSong.id, role, personId, personName)
                 }
                 onRemoveRole={handleRemoveRole}
+                onAttachFile={() => openAttachFileDialog("song")}
+                onDetachFile={handleDetachFileFromSong}
+                onDownloadFile={handleDownloadFile}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
@@ -652,6 +832,7 @@ export default function SetlistDetailPage({
               song={selectedSong}
               isOrganiser={isOrganiser}
               teamMembers={teamMembers}
+              files={songFiles}
               onUpdate={(updates) =>
                 handleUpdateSong(selectedSong.id, updates)
               }
@@ -659,6 +840,9 @@ export default function SetlistDetailPage({
                 handleAddRole(selectedSong.id, role, personId, personName)
               }
               onRemoveRole={handleRemoveRole}
+              onAttachFile={() => openAttachFileDialog("song")}
+              onDetachFile={handleDetachFileFromSong}
+              onDownloadFile={handleDownloadFile}
             />
           </ScrollArea>
         </div>
@@ -854,6 +1038,57 @@ export default function SetlistDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Attach file dialog */}
+      <Dialog
+        open={!!attachFileDialogOpen}
+        onOpenChange={(open) => { if (!open) setAttachFileDialogOpen(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Attach File to {attachFileDialogOpen === "song" ? "Song" : "Setlist"}
+            </DialogTitle>
+            <DialogDescription>
+              Select a file from the library to attach
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            {availableFiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No files available. Upload files in the Files section first.
+              </p>
+            ) : (
+              <ScrollArea className="max-h-64">
+                <div className="space-y-2">
+                  {availableFiles.map((file) => (
+                    <button
+                      key={file.id}
+                      onClick={() =>
+                        attachFileDialogOpen === "song"
+                          ? handleAttachFileToSong(file.id)
+                          : handleAttachFileToSetlist(file.id)
+                      }
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                    >
+                      {fileTypeIcon(file.type)}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{file.name}</p>
+                        <p className="text-xs text-muted-foreground">{file.size}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAttachFileDialogOpen(null)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1001,17 +1236,33 @@ function SortableSongCard(props: SongCardProps) {
 
 // ─── Song Detail (right panel) ───
 
+function fileTypeIcon(type: string) {
+  switch (type) {
+    case "image":
+      return <Image className="w-4 h-4 text-purple-500" />;
+    case "audio":
+      return <Music className="w-4 h-4 text-green-500" />;
+    default:
+      return <FileText className="w-4 h-4 text-blue-500" />;
+  }
+}
+
 function SongDetail({
   song,
   isOrganiser,
   teamMembers,
+  files,
   onUpdate,
   onAddRole,
   onRemoveRole,
+  onAttachFile,
+  onDetachFile,
+  onDownloadFile,
 }: {
   song: SongWithRoles;
   isOrganiser: boolean;
   teamMembers: EventMemberWithProfile[];
+  files: FileRecord[];
   onUpdate: (updates: {
     name?: string;
     key?: string;
@@ -1020,6 +1271,9 @@ function SongDetail({
   }) => void;
   onAddRole: (role: string, personId: string, personName: string) => void;
   onRemoveRole: (roleId: string) => void;
+  onAttachFile: () => void;
+  onDetachFile: (fileId: string) => void;
+  onDownloadFile: (storagePath: string, fileName: string) => void;
 }) {
   const [editingName, setEditingName] = useState(false);
   const [editingBpm, setEditingBpm] = useState(false);
@@ -1378,6 +1632,71 @@ function SongDetail({
               </div>
             </CardContent>
           </Card>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* Files */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Paperclip className="w-4 h-4" />
+            <Label className="text-sm font-medium">Files</Label>
+            <Badge variant="secondary" className="text-[10px]">
+              {files.length}
+            </Badge>
+          </div>
+          {isOrganiser && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={onAttachFile}
+            >
+              <Plus className="w-3 h-3 mr-1" />
+              Attach
+            </Button>
+          )}
+        </div>
+
+        {files.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No files attached.</p>
+        ) : (
+          <div className="space-y-2">
+            {files.map((file) => (
+              <div
+                key={file.id}
+                className="group flex items-center gap-3 py-1.5"
+              >
+                {fileTypeIcon(file.type)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm truncate">{file.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{file.size}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => onDownloadFile(file.storage_path, file.name)}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </Button>
+                  {isOrganiser && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                      onClick={() => onDetachFile(file.id)}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

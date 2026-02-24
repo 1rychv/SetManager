@@ -87,3 +87,63 @@ export async function detachFileFromEvent(fileId: string) {
 
   return { success: true };
 }
+
+export async function attachFileToSong(fileId: string, songId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("files")
+    .update({ song_id: songId })
+    .eq("id", fileId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
+
+export async function detachFileFromSong(fileId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("files")
+    .update({ song_id: null })
+    .eq("id", fileId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
+
+export async function attachFileToSetlist(fileId: string, setlistId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("files")
+    .update({ setlist_id: setlistId })
+    .eq("id", fileId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
+
+export async function detachFileFromSetlist(fileId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("files")
+    .update({ setlist_id: null })
+    .eq("id", fileId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
