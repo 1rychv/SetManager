@@ -13,6 +13,9 @@ import {
   ArrowLeft,
   MicVocal,
   GripVertical,
+  CalendarDays,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import {
   DndContext,
@@ -73,7 +76,7 @@ import {
   addSongRole,
   removeSongRole,
 } from "../actions";
-import type { SongWithRoles, SongRoleAssignment, EventMemberWithProfile } from "@/types";
+import type { SongWithRoles, SongRoleAssignment, EventMemberWithProfile, Event } from "@/types";
 
 // ─── Key color mapping ───
 
@@ -132,6 +135,9 @@ export default function SetlistDetailPage({
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [attachDialogOpen, setAttachDialogOpen] = useState(false);
+  const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
+  const [eventName, setEventName] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const [leftTab, setLeftTab] = useState<"songs" | "open-mic">("songs");
@@ -165,7 +171,19 @@ export default function SetlistDetailPage({
       setTitleValue(setlist.name);
       setEventId(setlist.event_id);
 
-      // Load team members if linked to an event
+      // Load event name and team members if linked
+      if (setlist.event_id) {
+        const { data: eventData } = await supabase
+          .from("events")
+          .select("name")
+          .eq("id", setlist.event_id)
+          .single();
+        setEventName(eventData?.name ?? null);
+      } else {
+        setEventName(null);
+        setTeamMembers([]);
+      }
+
       if (setlist.event_id) {
         const { data: members } = await supabase
           .from("event_members")
@@ -332,6 +350,42 @@ export default function SetlistDetailPage({
     }
   }
 
+  // ─── Attach / detach event ───
+
+  async function openAttachDialog() {
+    const supabase = createClient();
+    const today = new Date().toISOString().split("T")[0];
+    const { data } = await supabase
+      .from("events")
+      .select("*")
+      .gte("date", today)
+      .order("date", { ascending: true });
+
+    setAvailableEvents((data as Event[]) ?? []);
+    setAttachDialogOpen(true);
+  }
+
+  async function handleAttachEvent(selectedEventId: string) {
+    const result = await updateSetlist(setlistId, { event_id: selectedEventId });
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Setlist attached to event!");
+      setAttachDialogOpen(false);
+      loadSetlist(setlistId);
+    }
+  }
+
+  async function handleDetachEvent() {
+    const result = await updateSetlist(setlistId, { event_id: null });
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Setlist detached from event");
+      loadSetlist(setlistId);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6">
@@ -397,14 +451,42 @@ export default function SetlistDetailPage({
                 )}
               </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              {songs.length} {songs.length === 1 ? "song" : "songs"}
-            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{songs.length} {songs.length === 1 ? "song" : "songs"}</span>
+              {eventName && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-1">
+                    <CalendarDays className="w-3 h-3" />
+                    {eventName}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {isOrganiser && (
             <>
+              {eventId ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDetachEvent}
+                >
+                  <Unlink className="w-4 h-4 mr-1" />
+                  Detach
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openAttachDialog}
+                >
+                  <Link2 className="w-4 h-4 mr-1" />
+                  Attach to Event
+                </Button>
+              )}
               <Button size="sm" onClick={() => setAddDialogOpen(true)}>
                 <Plus className="w-4 h-4 mr-1" />
                 Add Song
@@ -685,6 +767,56 @@ export default function SetlistDetailPage({
             </Button>
             <Button variant="destructive" onClick={handleDeleteSetlist}>
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attach to event dialog */}
+      <Dialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Attach to Event</DialogTitle>
+            <DialogDescription>
+              Link this setlist to an upcoming event
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            {availableEvents.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No upcoming events found. Create an event first.
+              </p>
+            ) : (
+              <ScrollArea className="max-h-64">
+                <div className="space-y-2">
+                  {availableEvents.map((evt) => (
+                    <button
+                      key={evt.id}
+                      onClick={() => handleAttachEvent(evt.id)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                    >
+                      <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{evt.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(evt.date).toLocaleDateString(undefined, {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                          {" · "}
+                          {evt.venue}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAttachDialogOpen(false)}>
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
