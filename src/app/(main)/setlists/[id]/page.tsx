@@ -64,7 +64,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   addSong,
@@ -141,14 +140,11 @@ export default function SetlistDetailPage({
   const [eventName, setEventName] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
-  const [leftTab, setLeftTab] = useState<"songs" | "open-mic">("songs");
   const [addPerformerOpen, setAddPerformerOpen] = useState(false);
   const [approvedApps, setApprovedApps] = useState<OpenMicApplication[]>([]);
 
   const isOrganiser = profile?.role === "organiser";
   const selectedSong = songs.find((s) => s.id === selectedSongId) ?? null;
-  const openMicSongs = songs.filter((s) => s.is_open_mic);
-  const regularSongs = songs.filter((s) => !s.is_open_mic);
 
   // DnD sensors
   const sensors = useSensors(
@@ -330,8 +326,7 @@ export default function SetlistDetailPage({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    // Work on the currently displayed list (regular songs only — open mic stays separate)
-    const currentList = [...regularSongs];
+    const currentList = [...songs];
     const oldIndex = currentList.findIndex((s) => s.id === active.id);
     const newIndex = currentList.findIndex((s) => s.id === over.id);
 
@@ -341,10 +336,8 @@ export default function SetlistDetailPage({
     const [moved] = currentList.splice(oldIndex, 1);
     currentList.splice(newIndex, 0, moved);
 
-    // Rebuild the full song list with updated positions
     const reordered = currentList.map((s, i) => ({ ...s, position: i + 1 }));
-    const newSongs = [...reordered, ...openMicSongs];
-    setSongs(newSongs);
+    setSongs(reordered);
 
     // Persist to database
     const updates = reordered.map((s) => ({ id: s.id, position: s.position }));
@@ -532,6 +525,12 @@ export default function SetlistDetailPage({
               <Plus className="w-4 h-4 mr-1" />
               Add Song
             </Button>
+            {eventId && (
+              <Button variant="outline" size="sm" className="shrink-0" onClick={openAddPerformerDialog}>
+                <MicVocal className="w-4 h-4 mr-1" />
+                Add Performer
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -546,119 +545,36 @@ export default function SetlistDetailPage({
 
       {/* Two-panel layout */}
       <div className="flex flex-1 min-h-0">
-        {/* Left panel — Song list with tabs */}
+        {/* Left panel — Song list */}
         <div className="w-full md:w-[55%] border-r border-border flex flex-col">
-          {/* Tabs */}
-          <div className="px-3 pt-3">
-            <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as "songs" | "open-mic")}>
-              <TabsList className="w-full">
-                <TabsTrigger value="songs" className="flex-1">
-                  <Music2 className="w-3.5 h-3.5 mr-1.5" />
-                  Songs
-                  <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                    {regularSongs.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="open-mic" className="flex-1">
-                  <MicVocal className="w-3.5 h-3.5 mr-1.5" />
-                  Open Mic
-                  <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                    {openMicSongs.length}
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
           <ScrollArea className="flex-1">
-            {leftTab === "songs" ? (
-              regularSongs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-                  <Music2 className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">No songs yet</p>
-                  {isOrganiser && (
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={() => setAddDialogOpen(true)}
-                    >
-                      Add your first song
-                    </Button>
-                  )}
-                </div>
-              ) : isOrganiser ? (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={regularSongs.map((s) => s.id)}
-                    strategy={verticalListSortingStrategy}
+            {songs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+                <Music2 className="w-10 h-10 text-muted-foreground mb-3" />
+                <p className="text-muted-foreground">No songs yet</p>
+                {isOrganiser && (
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => setAddDialogOpen(true)}
                   >
-                    <div className="p-2">
-                      {regularSongs.map((song, index) => (
-                        <SortableSongCard
-                          key={song.id}
-                          song={song}
-                          index={index + 1}
-                          isSelected={selectedSongId === song.id}
-                          isOrganiser={isOrganiser}
-                          onSelect={() => setSelectedSongId(song.id)}
-                          onDelete={() => handleRemoveSong(song.id)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <div className="p-2">
-                  {regularSongs.map((song, index) => (
-                    <SongCard
-                      key={song.id}
-                      song={song}
-                      index={index + 1}
-                      isSelected={selectedSongId === song.id}
-                      isOrganiser={isOrganiser}
-                      onSelect={() => setSelectedSongId(song.id)}
-                      onDelete={() => handleRemoveSong(song.id)}
-                    />
-                  ))}
-                </div>
-              )
-            ) : (
-              <>
-                {isOrganiser && eventId && (
-                  <div className="p-2 pb-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={openAddPerformerDialog}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Performer
-                    </Button>
-                  </div>
+                    Add your first song
+                  </Button>
                 )}
-                {openMicSongs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-                    <MicVocal className="w-10 h-10 text-muted-foreground mb-3" />
-                    <p className="text-muted-foreground">No open mic songs yet</p>
-                    {!eventId ? (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Attach this setlist to an event with open mic enabled to add performers
-                      </p>
-                    ) : isOrganiser ? (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Use the button above to add approved performers from the linked event
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
+              </div>
+            ) : isOrganiser ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={songs.map((s) => s.id)}
+                  strategy={verticalListSortingStrategy}
+                >
                   <div className="p-2">
-                    {openMicSongs.map((song, index) => (
-                      <SongCard
+                    {songs.map((song, index) => (
+                      <SortableSongCard
                         key={song.id}
                         song={song}
                         index={index + 1}
@@ -669,8 +585,22 @@ export default function SetlistDetailPage({
                       />
                     ))}
                   </div>
-                )}
-              </>
+                </SortableContext>
+              </DndContext>
+            ) : (
+              <div className="p-2">
+                {songs.map((song, index) => (
+                  <SongCard
+                    key={song.id}
+                    song={song}
+                    index={index + 1}
+                    isSelected={selectedSongId === song.id}
+                    isOrganiser={isOrganiser}
+                    onSelect={() => setSelectedSongId(song.id)}
+                    onDelete={() => handleRemoveSong(song.id)}
+                  />
+                ))}
+              </div>
             )}
           </ScrollArea>
         </div>
