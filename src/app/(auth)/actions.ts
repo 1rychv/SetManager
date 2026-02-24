@@ -30,6 +30,7 @@ export async function signup(formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const confirm = formData.get("confirm") as string;
+  const role = formData.get("role") as string;
 
   if (!name || !email || !password || !confirm) {
     return { error: "Please fill in all fields." };
@@ -51,6 +52,7 @@ export async function signup(formData: FormData) {
     options: {
       data: {
         name,
+        role: role === "organiser" ? "organiser" : "member",
       },
     },
   });

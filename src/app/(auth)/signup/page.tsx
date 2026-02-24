@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Music2 } from "lucide-react";
+import { Music2, Crown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,11 +13,15 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { signup } from "../actions";
+
+type Role = "member" | "organiser";
 
 export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<Role>("member");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -25,13 +29,13 @@ export default function SignupPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    formData.set("role", selectedRole);
     const result = await signup(formData);
 
     if (result?.error) {
       setError(result.error);
       setLoading(false);
     }
-    // If no error, the server action redirects to /dashboard
   }
 
   return (
@@ -55,12 +59,53 @@ export default function SignupPage() {
       <Card>
         <CardHeader>
           <CardTitle>Sign up</CardTitle>
-          <CardDescription>
-            Create your account to get started
-          </CardDescription>
+          <CardDescription>Choose your role and create your account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {/* Role selection */}
+            <div className="flex flex-col gap-2">
+              <Label>Account type</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRole("member")}
+                  className={`relative flex flex-col items-center gap-2 rounded-lg border-2 p-4 text-center transition-colors ${
+                    selectedRole === "member"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-muted-foreground/40"
+                  }`}
+                >
+                  <Users className="w-6 h-6" />
+                  <span className="text-sm font-medium">Member</span>
+                  <Badge variant="secondary" className="text-xs">
+                    Free
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    View events, RSVP, upload files
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRole("organiser")}
+                  className={`relative flex flex-col items-center gap-2 rounded-lg border-2 p-4 text-center transition-colors ${
+                    selectedRole === "organiser"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-muted-foreground/40"
+                  }`}
+                >
+                  <Crown className="w-6 h-6" />
+                  <span className="text-sm font-medium">Organiser</span>
+                  <Badge className="text-xs">
+                    Pro
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Create events, manage team, setlists
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Full name</Label>
               <Input
