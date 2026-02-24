@@ -34,6 +34,24 @@ export async function createSetlist(formData: FormData) {
   redirect(`/setlists/${data.id}`);
 }
 
+export async function updateSetlist(
+  id: string,
+  updates: { name?: string; event_id?: string | null }
+) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("setlists")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
+
 export async function deleteSetlist(id: string) {
   const supabase = await createClient();
 
