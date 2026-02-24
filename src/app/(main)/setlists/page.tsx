@@ -80,7 +80,7 @@ export default function SetlistsPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-8 max-w-4xl mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-40 bg-muted rounded" />
           <div className="grid gap-3">
@@ -94,7 +94,7 @@ export default function SetlistsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Setlists</h1>

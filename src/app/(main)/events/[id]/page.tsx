@@ -16,6 +16,15 @@ import {
   Edit,
   Copy,
   Plus,
+  FileText,
+  Image,
+  Music,
+  Download,
+  Upload,
+  Link2,
+  Unlink,
+  ExternalLink,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +52,9 @@ import { BackButton } from "@/components/back-button";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
 import { updateRSVP, assignRole } from "../actions";
-import type { Event, EventMember, Profile, RSVPStatus } from "@/types";
+import { attachFileToEvent, detachFileFromEvent } from "../../files/actions";
+import { updateSetlist } from "../../setlists/actions";
+import type { Event, EventMember, Profile, RSVPStatus, FileWithUploader, FileType, Setlist, SongWithRoles } from "@/types";
 
 function getInitials(name: string) {
   return name
@@ -52,6 +63,28 @@ function getInitials(name: string) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+function fileTypeIcon(type: FileType) {
+  switch (type) {
+    case "document":
+      return <FileText className="w-5 h-5" />;
+    case "image":
+      return <Image className="w-5 h-5" />;
+    case "audio":
+      return <Music className="w-5 h-5" />;
+  }
+}
+
+function fileTypeBg(type: FileType) {
+  switch (type) {
+    case "document":
+      return "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
+    case "image":
+      return "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400";
+    case "audio":
+      return "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400";
+  }
 }
 
 type MemberWithProfile = EventMember & { profiles: Pick<Profile, "name" | "avatar_url"> };
@@ -70,6 +103,18 @@ export default function EventDetailPage() {
   } | null>(null);
   const [assignedRole, setAssignedRole] = useState("");
 
+  // Setlist tab state
+  const [eventSetlist, setEventSetlist] = useState<(Setlist & { songs: SongWithRoles[] }) | null>(null);
+  const [unattachedSetlists, setUnattachedSetlists] = useState<(Setlist & { songs: { count: number }[] })[]>([]);
+  const [attachSetlistDialogOpen, setAttachSetlistDialogOpen] = useState(false);
+  const [attachSetlistId, setAttachSetlistId] = useState("");
+
+  // Files tab state
+  const [eventFiles, setEventFiles] = useState<FileWithUploader[]>([]);
+  const [unattachedFiles, setUnattachedFiles] = useState<FileWithUploader[]>([]);
+  const [attachDialogOpen, setAttachDialogOpen] = useState(false);
+  const [attachFileId, setAttachFileId] = useState("");
+
   const isOrganiser = profile?.role === "organiser";
 
   useEffect(() => {
@@ -87,6 +132,118 @@ export default function EventDetailPage() {
 
     fetchEvent();
   }, [id]);
+
+  // Fetch setlist attached to this event
+  async function fetchEventSetlist() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("setlists")
+      .select("*, songs(*, song_role_assignments(*))")
+      .eq("event_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setEventSetlist(data as (Setlist & { songs: SongWithRoles[] }) | null);
+  }
+
+  // Fetch unattached setlists for the attach dialog
+  async function fetchUnattachedSetlists() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("setlists")
+      .select("*, songs(count)")
+      .is("event_id", null)
+      .order("created_at", { ascending: false });
+    setUnattachedSetlists((data as (Setlist & { songs: { count: number }[] })[]) || []);
+  }
+
+  // Fetch files attached to this event
+  async function fetchEventFiles() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("files")
+      .select("*, profiles!files_uploader_id_fkey(name)")
+      .eq("event_id", id)
+      .order("created_at", { ascending: false });
+    setEventFiles((data as FileWithUploader[]) || []);
+  }
+
+  // Fetch unattached files for the attach dialog
+  async function fetchUnattachedFiles() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("files")
+      .select("*, profiles!files_uploader_id_fkey(name)")
+      .is("event_id", null)
+      .order("created_at", { ascending: false });
+    setUnattachedFiles((data as FileWithUploader[]) || []);
+  }
+
+  useEffect(() => {
+    if (id) {
+      fetchEventSetlist();
+      fetchEventFiles();
+    }
+  }, [id]);
+
+  async function handleAttachSetlist() {
+    if (!attachSetlistId) return;
+    const result = await updateSetlist(attachSetlistId, { event_id: id });
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Setlist attached!");
+      fetchEventSetlist();
+    }
+    setAttachSetlistDialogOpen(false);
+    setAttachSetlistId("");
+  }
+
+  async function handleDetachSetlist() {
+    if (!eventSetlist) return;
+    const result = await updateSetlist(eventSetlist.id, { event_id: null });
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Setlist detached.");
+      fetchEventSetlist();
+    }
+  }
+
+  async function handleDownloadFile(file: FileWithUploader) {
+    const supabase = createClient();
+    const { data, error } = await supabase.storage
+      .from("files")
+      .createSignedUrl(file.storage_path, 60);
+    if (error || !data?.signedUrl) {
+      toast.error("Failed to generate download link.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
+  }
+
+  async function handleAttachFile() {
+    if (!attachFileId) return;
+    const result = await attachFileToEvent(attachFileId, id);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("File attached!");
+      fetchEventFiles();
+    }
+    setAttachDialogOpen(false);
+    setAttachFileId("");
+  }
+
+  async function handleDetachFile(fileId: string) {
+    const result = await detachFileFromEvent(fileId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("File detached.");
+      fetchEventFiles();
+    }
+  }
 
   if (loading) {
     return (
@@ -289,6 +446,15 @@ export default function EventDetailPage() {
                       View Applications
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      window.open(`/lineup/${event.slug}`, "_blank")
+                    }
+                  >
+                    View Lineup
+                  </Button>
                   <Button size="sm" variant="outline" onClick={copyPublicLink}>
                     <Copy className="w-3.5 h-3.5 mr-1.5" />
                     Copy Link
@@ -380,36 +546,184 @@ export default function EventDetailPage() {
 
         {/* Setlist Tab */}
         <TabsContent value="setlist">
-          <div className="text-center py-12 text-muted-foreground">
-            <Music2 className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p>No setlist attached</p>
-            {isOrganiser && (
-              <Button
-                className="mt-3"
-                variant="outline"
-                onClick={() => router.push("/setlists")}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Setlist
-              </Button>
-            )}
-          </div>
+          {eventSetlist ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h3 style={{ fontWeight: 600 }}>{eventSetlist.name}</h3>
+                  <Badge variant="secondary">
+                    {eventSetlist.songs.length}{" "}
+                    {eventSetlist.songs.length === 1 ? "song" : "songs"}
+                  </Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/setlists/${eventSetlist.id}`)}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                    Open
+                  </Button>
+                  {isOrganiser && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDetachSetlist}
+                    >
+                      <Unlink className="w-3.5 h-3.5 mr-1.5" />
+                      Detach
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {eventSetlist.songs.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No songs in this setlist yet.{" "}
+                  <button
+                    className="underline hover:text-foreground"
+                    onClick={() => router.push(`/setlists/${eventSetlist.id}`)}
+                  >
+                    Add some
+                  </button>
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {[...eventSetlist.songs]
+                    .sort((a, b) => a.position - b.position)
+                    .map((song, idx) => (
+                      <div
+                        key={song.id}
+                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="text-xs text-muted-foreground w-6 text-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm truncate" style={{ fontWeight: 500 }}>
+                            {song.name}
+                          </p>
+                        </div>
+                        {song.key && (
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {song.key}
+                          </Badge>
+                        )}
+                        {song.bpm > 0 && (
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {song.bpm} BPM
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Music2 className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p>No setlist attached</p>
+              {isOrganiser && (
+                <div className="flex justify-center gap-2 mt-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      fetchUnattachedSetlists();
+                      setAttachSetlistDialogOpen(true);
+                    }}
+                  >
+                    <Link2 className="w-4 h-4 mr-2" />
+                    Attach Setlist
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/setlists")}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Setlist
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         {/* Files Tab */}
         <TabsContent value="files">
-          <div className="text-center py-12 text-muted-foreground">
-            <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p>No files attached to this event</p>
-            <Button
-              className="mt-3"
-              variant="outline"
-              onClick={() => router.push("/files")}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Attach File
-            </Button>
-          </div>
+          {isOrganiser && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  fetchUnattachedFiles();
+                  setAttachDialogOpen(true);
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Attach Existing File
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/files")}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload New
+              </Button>
+            </div>
+          )}
+
+          {eventFiles.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p>No files attached to this event</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {eventFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                >
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${fileTypeBg(file.type)}`}
+                  >
+                    {fileTypeIcon(file.type)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm truncate" style={{ fontWeight: 500 }}>
+                      {file.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {file.size} &middot; {file.profiles?.name}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleDownloadFile(file)}
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
+                    {isOrganiser && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDetachFile(file.id)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -463,6 +777,107 @@ export default function EventDetailPage() {
               Cancel
             </Button>
             <Button onClick={handleAssignRole}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attach Setlist Dialog */}
+      <Dialog open={attachSetlistDialogOpen} onOpenChange={setAttachSetlistDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Attach Setlist</DialogTitle>
+            <DialogDescription>
+              Choose an unattached setlist from your library
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {unattachedSetlists.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No unattached setlists available. Create one first.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <Label>Setlist</Label>
+                <Select value={attachSetlistId} onValueChange={setAttachSetlistId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a setlist" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unattachedSetlists.map((s) => {
+                      const count = s.songs?.[0]?.count ?? 0;
+                      return (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} ({count} {count === 1 ? "song" : "songs"})
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAttachSetlistDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAttachSetlist}
+              disabled={!attachSetlistId || unattachedSetlists.length === 0}
+            >
+              Attach
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attach File Dialog */}
+      <Dialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Attach File</DialogTitle>
+            <DialogDescription>
+              Choose an unattached file from the library
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {unattachedFiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No unattached files available. Upload one first.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <Label>File</Label>
+                <Select value={attachFileId} onValueChange={setAttachFileId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a file" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unattachedFiles.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.name} ({f.size})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAttachDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAttachFile}
+              disabled={!attachFileId || unattachedFiles.length === 0}
+            >
+              Attach
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

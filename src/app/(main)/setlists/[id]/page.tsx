@@ -75,8 +75,9 @@ import {
   updateSetlist,
   addSongRole,
   removeSongRole,
+  addOpenMicSong,
 } from "../actions";
-import type { SongWithRoles, SongRoleAssignment, EventMemberWithProfile, Event } from "@/types";
+import type { SongWithRoles, SongRoleAssignment, EventMemberWithProfile, Event, OpenMicApplication } from "@/types";
 
 // ─── Key color mapping ───
 
@@ -141,6 +142,8 @@ export default function SetlistDetailPage({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const [leftTab, setLeftTab] = useState<"songs" | "open-mic">("songs");
+  const [addPerformerOpen, setAddPerformerOpen] = useState(false);
+  const [approvedApps, setApprovedApps] = useState<OpenMicApplication[]>([]);
 
   const isOrganiser = profile?.role === "organiser";
   const selectedSong = songs.find((s) => s.id === selectedSongId) ?? null;
@@ -388,9 +391,44 @@ export default function SetlistDetailPage({
     }
   }
 
+  // ─── Open mic performer handlers ───
+
+  async function openAddPerformerDialog() {
+    if (!eventId) return;
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("open_mic_applications")
+      .select("*")
+      .eq("event_id", eventId)
+      .eq("status", "approved")
+      .order("submitted_at", { ascending: true });
+
+    // Filter out applications already added to this setlist
+    const existingAppIds = new Set(
+      songs.filter((s) => s.open_mic_application_id).map((s) => s.open_mic_application_id)
+    );
+    const available = ((data as OpenMicApplication[]) ?? []).filter(
+      (app) => !existingAppIds.has(app.id)
+    );
+
+    setApprovedApps(available);
+    setAddPerformerOpen(true);
+  }
+
+  async function handleAddPerformer(app: OpenMicApplication) {
+    const result = await addOpenMicSong(setlistId, app.id, app.song);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success(`${app.full_name} added to setlist!`);
+      setAddPerformerOpen(false);
+      loadSetlist(setlistId);
+    }
+  }
+
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-8">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-48 bg-muted rounded" />
           <div className="h-96 bg-muted rounded-lg" />
@@ -589,31 +627,50 @@ export default function SetlistDetailPage({
                 </div>
               )
             ) : (
-              openMicSongs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-                  <MicVocal className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">No open mic songs yet</p>
-                  {!eventId && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Attach this setlist to an event with open mic enabled to add performers
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="p-2">
-                  {openMicSongs.map((song, index) => (
-                    <SongCard
-                      key={song.id}
-                      song={song}
-                      index={index + 1}
-                      isSelected={selectedSongId === song.id}
-                      isOrganiser={isOrganiser}
-                      onSelect={() => setSelectedSongId(song.id)}
-                      onDelete={() => handleRemoveSong(song.id)}
-                    />
-                  ))}
-                </div>
-              )
+              <>
+                {isOrganiser && eventId && (
+                  <div className="p-2 pb-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={openAddPerformerDialog}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Performer
+                    </Button>
+                  </div>
+                )}
+                {openMicSongs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+                    <MicVocal className="w-10 h-10 text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground">No open mic songs yet</p>
+                    {!eventId ? (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Attach this setlist to an event with open mic enabled to add performers
+                      </p>
+                    ) : isOrganiser ? (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Use the button above to add approved performers from the linked event
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="p-2">
+                    {openMicSongs.map((song, index) => (
+                      <SongCard
+                        key={song.id}
+                        song={song}
+                        index={index + 1}
+                        isSelected={selectedSongId === song.id}
+                        isOrganiser={isOrganiser}
+                        onSelect={() => setSelectedSongId(song.id)}
+                        onDelete={() => handleRemoveSong(song.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </ScrollArea>
         </div>
@@ -818,6 +875,50 @@ export default function SetlistDetailPage({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAttachDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add open mic performer dialog */}
+      <Dialog open={addPerformerOpen} onOpenChange={setAddPerformerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Open Mic Performer</DialogTitle>
+            <DialogDescription>
+              Select an approved performer to add to the setlist
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            {approvedApps.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No approved performers available to add. Either all have been added already or there are no approved applications for this event.
+              </p>
+            ) : (
+              <ScrollArea className="max-h-64">
+                <div className="space-y-2">
+                  {approvedApps.map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => handleAddPerformer(app)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                    >
+                      <MicVocal className="w-4 h-4 text-purple-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{app.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {app.song}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddPerformerOpen(false)}>
               Cancel
             </Button>
           </DialogFooter>

@@ -159,6 +159,53 @@ export async function reorderSongs(
   return { success: true };
 }
 
+// ─── Open Mic Song ───
+
+export async function addOpenMicSong(
+  setlistId: string,
+  applicationId: string,
+  songName: string
+) {
+  const supabase = await createClient();
+
+  // Check if this application is already added
+  const { count: existing } = await supabase
+    .from("songs")
+    .select("*", { count: "exact", head: true })
+    .eq("setlist_id", setlistId)
+    .eq("open_mic_application_id", applicationId);
+
+  if (existing && existing > 0) {
+    return { error: "This performer is already in the setlist." };
+  }
+
+  // Get the next position
+  const { count } = await supabase
+    .from("songs")
+    .select("*", { count: "exact", head: true })
+    .eq("setlist_id", setlistId);
+
+  const position = (count ?? 0) + 1;
+
+  const { data, error } = await supabase
+    .from("songs")
+    .insert({
+      setlist_id: setlistId,
+      name: songName,
+      is_open_mic: true,
+      open_mic_application_id: applicationId,
+      position,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { data };
+}
+
 // ─── Song Role Assignments ───
 
 export async function addSongRole(

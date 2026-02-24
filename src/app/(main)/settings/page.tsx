@@ -29,7 +29,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-8 max-w-2xl mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-32 bg-muted rounded" />
           <div className="h-40 bg-muted rounded-lg" />
@@ -81,7 +81,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">

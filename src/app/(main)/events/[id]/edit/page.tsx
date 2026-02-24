@@ -2,18 +2,35 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Copy, Link2 } from "lucide-react";
+import { Copy, Link2, Music2, Unlink, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { BackButton } from "@/components/back-button";
 import { createClient } from "@/lib/supabase/client";
 import { updateEvent } from "../../actions";
-import type { Event } from "@/types";
+import { updateSetlist } from "../../../setlists/actions";
+import type { Event, Setlist } from "@/types";
 
 export default function EditEventPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +46,33 @@ export default function EditEventPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+
+  // Setlist state
+  const [linkedSetlist, setLinkedSetlist] = useState<(Setlist & { songs: { count: number }[] }) | null>(null);
+  const [unattachedSetlists, setUnattachedSetlists] = useState<(Setlist & { songs: { count: number }[] })[]>([]);
+  const [setlistDialogOpen, setSetlistDialogOpen] = useState(false);
+  const [selectedSetlistId, setSelectedSetlistId] = useState("");
+
+  async function fetchLinkedSetlist() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("setlists")
+      .select("*, songs(count)")
+      .eq("event_id", id)
+      .limit(1)
+      .maybeSingle();
+    setLinkedSetlist(data as (Setlist & { songs: { count: number }[] }) | null);
+  }
+
+  async function fetchUnattachedSetlists() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("setlists")
+      .select("*, songs(count)")
+      .is("event_id", null)
+      .order("created_at", { ascending: false });
+    setUnattachedSetlists((data as (Setlist & { songs: { count: number }[] })[]) || []);
+  }
 
   useEffect(() => {
     async function fetchEvent() {
@@ -53,6 +97,7 @@ export default function EditEventPage() {
     }
 
     fetchEvent();
+    fetchLinkedSetlist();
   }, [id]);
 
   const slug = name
@@ -86,6 +131,30 @@ export default function EditEventPage() {
     navigator.clipboard.writeText(link);
     toast.success("Public link copied!");
   };
+
+  async function handleAttachSetlist() {
+    if (!selectedSetlistId) return;
+    const result = await updateSetlist(selectedSetlistId, { event_id: id });
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Setlist attached!");
+      fetchLinkedSetlist();
+    }
+    setSetlistDialogOpen(false);
+    setSelectedSetlistId("");
+  }
+
+  async function handleDetachSetlist() {
+    if (!linkedSetlist) return;
+    const result = await updateSetlist(linkedSetlist.id, { event_id: null });
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Setlist detached.");
+      setLinkedSetlist(null);
+    }
+  }
 
   if (fetching) {
     return (
@@ -240,6 +309,120 @@ export default function EditEventPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Linked Setlist Section */}
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between mb-3">
+            <Label className="flex items-center gap-2">
+              <Music2 className="w-4 h-4" />
+              Linked Setlist
+            </Label>
+          </div>
+          {linkedSetlist ? (
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm truncate" style={{ fontWeight: 500 }}>
+                  {linkedSetlist.name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {linkedSetlist.songs?.[0]?.count ?? 0} songs
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/setlists/${linkedSetlist.id}`)}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                  Open
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDetachSetlist}
+                >
+                  <Unlink className="w-3.5 h-3.5 mr-1.5" />
+                  Detach
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground mb-3">
+                No setlist linked to this event
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  fetchUnattachedSetlists();
+                  setSetlistDialogOpen(true);
+                }}
+              >
+                <Link2 className="w-4 h-4 mr-2" />
+                Attach Setlist
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Attach Setlist Dialog */}
+      <Dialog open={setlistDialogOpen} onOpenChange={setSetlistDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Attach Setlist</DialogTitle>
+            <DialogDescription>
+              Choose an unattached setlist from your library
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {unattachedSetlists.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No unattached setlists available. Create one first.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <Label>Setlist</Label>
+                <Select value={selectedSetlistId} onValueChange={setSelectedSetlistId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a setlist" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unattachedSetlists.map((s) => {
+                      const count = s.songs?.[0]?.count ?? 0;
+                      return (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} ({count} {count === 1 ? "song" : "songs"})
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSetlistDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAttachSetlist}
+              disabled={!selectedSetlistId || unattachedSetlists.length === 0}
+            >
+              Attach
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
