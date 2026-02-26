@@ -21,6 +21,7 @@ import {
   Music,
   Download,
   Paperclip,
+  ChevronDown,
 } from "lucide-react";
 import {
   DndContext,
@@ -157,6 +158,7 @@ export default function SetlistDetailPage({
   const [setlistFiles, setSetlistFiles] = useState<FileRecord[]>([]);
   const [attachFileDialogOpen, setAttachFileDialogOpen] = useState<"song" | "setlist" | null>(null);
   const [availableFiles, setAvailableFiles] = useState<FileRecord[]>([]);
+  const [filesExpanded, setFilesExpanded] = useState(false);
 
   const isOrganiser = profile?.role === "organiser";
   const selectedSong = songs.find((s) => s.id === selectedSongId) ?? null;
@@ -684,49 +686,57 @@ export default function SetlistDetailPage({
 
         {/* Setlist-level files */}
         {(setlistFiles.length > 0 || isOrganiser) && (
-          <div className="flex items-center justify-center gap-2 flex-wrap md:justify-start md:pl-11">
-            <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            {setlistFiles.length === 0 ? (
-              <span className="text-xs text-muted-foreground">No setlist files</span>
-            ) : (
-              setlistFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className="group flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 shrink-0"
-                >
-                  {fileTypeIcon(file.type)}
-                  <span className="truncate max-w-[120px]">{file.name}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    onClick={() => handleDownloadFile(file.storage_path, file.name)}
+          <div className="md:pl-11">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full justify-center md:justify-start"
+              onClick={() => setFilesExpanded(!filesExpanded)}
+            >
+              <Paperclip className="w-3.5 h-3.5 shrink-0" />
+              <span>{setlistFiles.length} {setlistFiles.length === 1 ? "file" : "files"} attached</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filesExpanded ? "rotate-180" : ""}`} />
+            </button>
+            {filesExpanded && (
+              <div className="mt-2 space-y-1">
+                {setlistFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    className="group flex items-center gap-2 text-xs border rounded-md px-3 py-1.5"
                   >
-                    <Download className="w-3 h-3" />
-                  </Button>
-                  {isOrganiser && (
+                    {fileTypeIcon(file.type)}
+                    <span className="truncate flex-1">{file.name}</span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
-                      onClick={() => handleDetachFileFromSetlist(file.id)}
+                      className="h-5 w-5 shrink-0"
+                      onClick={() => handleDownloadFile(file.storage_path, file.name)}
                     >
-                      <X className="w-3 h-3" />
+                      <Download className="w-3 h-3" />
                     </Button>
-                  )}
-                </div>
-              ))
-            )}
-            {isOrganiser && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs shrink-0"
-                onClick={() => openAttachFileDialog("setlist")}
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                Attach File
-              </Button>
+                    {isOrganiser && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                        onClick={() => handleDetachFileFromSetlist(file.id)}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                {isOrganiser && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs w-full"
+                    onClick={() => openAttachFileDialog("setlist")}
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Attach File
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         )}
