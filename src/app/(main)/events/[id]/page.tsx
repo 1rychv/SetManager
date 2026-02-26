@@ -17,7 +17,7 @@ import {
   Copy,
   Plus,
   FileText,
-  Image,
+  Image as ImageIcon,
   Music,
   Download,
   Upload,
@@ -70,7 +70,7 @@ function fileTypeIcon(type: FileType) {
     case "document":
       return <FileText className="w-5 h-5" />;
     case "image":
-      return <Image className="w-5 h-5" />;
+      return <ImageIcon className="w-5 h-5" />;
     case "audio":
       return <Music className="w-5 h-5" />;
   }
@@ -118,6 +118,7 @@ export default function EventDetailPage() {
   const isOrganiser = profile?.role === "organiser";
 
   useEffect(() => {
+    let ignore = false;
     async function fetchEvent() {
       const supabase = createClient();
       const { data } = await supabase
@@ -126,11 +127,14 @@ export default function EventDetailPage() {
         .eq("id", id)
         .single();
 
-      setEvent(data as EventFull | null);
-      setLoading(false);
+      if (!ignore) {
+        setEvent(data as EventFull | null);
+        setLoading(false);
+      }
     }
 
     fetchEvent();
+    return () => { ignore = true; };
   }, [id]);
 
   // Fetch setlist attached to this event
@@ -180,10 +184,32 @@ export default function EventDetailPage() {
   }
 
   useEffect(() => {
-    if (id) {
-      fetchEventSetlist();
-      fetchEventFiles();
+    let ignore = false;
+    async function load() {
+      const supabase = createClient();
+      const [setlistRes, filesRes] = await Promise.all([
+        supabase
+          .from("setlists")
+          .select("*, songs(*, song_role_assignments(*))")
+          .eq("event_id", id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("files")
+          .select("*, profiles!files_uploader_id_fkey(name)")
+          .eq("event_id", id)
+          .order("created_at", { ascending: false }),
+      ]);
+      if (!ignore) {
+        setEventSetlist(setlistRes.data as (Setlist & { songs: SongWithRoles[] }) | null);
+        setEventFiles((filesRes.data as FileWithUploader[]) || []);
+      }
     }
+    if (id) {
+      load();
+    }
+    return () => { ignore = true; };
   }, [id]);
 
   async function handleAttachSetlist() {

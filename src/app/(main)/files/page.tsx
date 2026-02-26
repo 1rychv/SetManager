@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { format } from "date-fns";
 import {
   Upload,
   Search,
   FileText,
-  Image,
+  Image as ImageIcon,
   Music,
   FolderOpen,
   Download,
   Trash2,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +42,7 @@ function fileTypeIcon(type: FileType) {
     case "document":
       return <FileText className="w-5 h-5" />;
     case "image":
-      return <Image className="w-5 h-5" />;
+      return <ImageIcon className="w-5 h-5" />;
     case "audio":
       return <Music className="w-5 h-5" />;
   }
@@ -98,7 +97,7 @@ export default function FilesPage() {
     null
   );
 
-  const fetchFiles = useCallback(async () => {
+  async function fetchFiles() {
     const supabase = createClient();
     const { data } = await supabase
       .from("files")
@@ -107,11 +106,25 @@ export default function FilesPage() {
 
     setFiles((data as FileWithUploader[]) || []);
     setLoading(false);
-  }, []);
+  }
 
   useEffect(() => {
-    fetchFiles();
-  }, [fetchFiles]);
+    let ignore = false;
+    async function load() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("files")
+        .select("*, profiles!files_uploader_id_fkey(name)")
+        .order("created_at", { ascending: false });
+
+      if (!ignore) {
+        setFiles((data as FileWithUploader[]) || []);
+        setLoading(false);
+      }
+    }
+    load();
+    return () => { ignore = true; };
+  }, []);
 
   const filteredFiles = files.filter((f) => {
     const matchesSearch = f.name

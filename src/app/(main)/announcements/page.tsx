@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Plus, Megaphone, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,7 +77,7 @@ export default function AnnouncementsPage() {
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const fetchAnnouncements = useCallback(async () => {
+  async function fetchAnnouncements() {
     const supabase = createClient();
     const { data } = await supabase
       .from("announcements")
@@ -86,11 +86,25 @@ export default function AnnouncementsPage() {
 
     setAnnouncements((data as AnnouncementWithAuthor[]) || []);
     setLoading(false);
-  }, []);
+  }
 
   useEffect(() => {
-    fetchAnnouncements();
-  }, [fetchAnnouncements]);
+    let ignore = false;
+    async function load() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("announcements")
+        .select("*, profiles!announcements_author_id_fkey(name, avatar_url)")
+        .order("created_at", { ascending: false });
+
+      if (!ignore) {
+        setAnnouncements((data as AnnouncementWithAuthor[]) || []);
+        setLoading(false);
+      }
+    }
+    load();
+    return () => { ignore = true; };
+  }, []);
 
   const openCreate = () => {
     setEditingId(null);

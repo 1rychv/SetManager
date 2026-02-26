@@ -34,6 +34,7 @@ export default function EventsPage() {
   const isOrganiser = profile?.role === "organiser";
 
   useEffect(() => {
+    let ignore = false;
     async function fetchEvents() {
       const supabase = createClient();
       const { data } = await supabase
@@ -41,11 +42,14 @@ export default function EventsPage() {
         .select("*, event_members(*, profiles(name))")
         .order("date", { ascending: true });
 
-      setEvents((data as EventWithMembers[]) || []);
-      setLoading(false);
+      if (!ignore) {
+        setEvents((data as EventWithMembers[]) || []);
+        setLoading(false);
+      }
     }
 
     fetchEvents();
+    return () => { ignore = true; };
   }, []);
 
   const today = new Date().toISOString().split("T")[0];

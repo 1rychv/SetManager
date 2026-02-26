@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -75,29 +74,37 @@ export default function EditEventPage() {
   }
 
   useEffect(() => {
-    async function fetchEvent() {
+    let ignore = false;
+    async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("events")
-        .select("*")
-        .eq("id", id)
-        .single<Event>();
+      const [eventRes, setlistRes] = await Promise.all([
+        supabase.from("events").select("*").eq("id", id).single<Event>(),
+        supabase
+          .from("setlists")
+          .select("*, songs(count)")
+          .eq("event_id", id)
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-      if (data) {
-        setEvent(data);
-        setName(data.name);
-        setDate(data.date);
-        setStartTime(data.start_time);
-        setEndTime(data.end_time);
-        setVenue(data.venue);
-        setDescription(data.description);
-        setOpenMicEnabled(data.open_mic_enabled);
+      if (!ignore) {
+        if (eventRes.data) {
+          setEvent(eventRes.data);
+          setName(eventRes.data.name);
+          setDate(eventRes.data.date);
+          setStartTime(eventRes.data.start_time);
+          setEndTime(eventRes.data.end_time);
+          setVenue(eventRes.data.venue);
+          setDescription(eventRes.data.description);
+          setOpenMicEnabled(eventRes.data.open_mic_enabled);
+        }
+        setLinkedSetlist(setlistRes.data as (Setlist & { songs: { count: number }[] }) | null);
+        setFetching(false);
       }
-      setFetching(false);
     }
 
-    fetchEvent();
-    fetchLinkedSetlist();
+    load();
+    return () => { ignore = true; };
   }, [id]);
 
   const slug = name

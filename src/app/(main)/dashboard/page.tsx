@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
@@ -78,7 +78,7 @@ export default function DashboardPage() {
   );
   const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
+  async function fetchData() {
     const supabase = createClient();
     const today = new Date().toISOString().split("T")[0];
 
@@ -100,11 +100,38 @@ export default function DashboardPage() {
       (announcementsRes.data as AnnouncementWithAuthor[]) || []
     );
     setLoading(false);
-  }, []);
+  }
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    async function load() {
+      const supabase = createClient();
+      const today = new Date().toISOString().split("T")[0];
+
+      const [eventsRes, announcementsRes] = await Promise.all([
+        supabase
+          .from("events")
+          .select("*, event_members(*, profiles(name))")
+          .gte("date", today)
+          .order("date", { ascending: true }),
+        supabase
+          .from("announcements")
+          .select("*, profiles!announcements_author_id_fkey(name, avatar_url)")
+          .order("created_at", { ascending: false })
+          .limit(3),
+      ]);
+
+      if (!ignore) {
+        setEvents((eventsRes.data as EventWithMembers[]) || []);
+        setAnnouncements(
+          (announcementsRes.data as AnnouncementWithAuthor[]) || []
+        );
+        setLoading(false);
+      }
+    }
+    load();
+    return () => { ignore = true; };
+  }, []);
 
   const nextEvent = events[0] || null;
 

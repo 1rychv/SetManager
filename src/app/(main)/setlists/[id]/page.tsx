@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -17,7 +17,7 @@ import {
   Link2,
   Unlink,
   FileText,
-  Image,
+  Image as ImageIcon,
   Music,
   Download,
   Paperclip,
@@ -167,68 +167,65 @@ export default function SetlistDetailPage({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const loadSetlist = useCallback(
-    async (id: string) => {
-      const supabase = createClient();
-      const { data: setlist } = await supabase
-        .from("setlists")
-        .select("id, name, event_id")
-        .eq("id", id)
+  async function loadSetlist(id: string) {
+    const supabase = createClient();
+    const { data: setlist } = await supabase
+      .from("setlists")
+      .select("id, name, event_id")
+      .eq("id", id)
+      .single();
+
+    if (!setlist) {
+      router.push("/setlists");
+      return;
+    }
+
+    setSetlistName(setlist.name);
+    setTitleValue(setlist.name);
+    setEventId(setlist.event_id);
+
+    // Load event name and team members if linked
+    if (setlist.event_id) {
+      const { data: eventData } = await supabase
+        .from("events")
+        .select("name")
+        .eq("id", setlist.event_id)
         .single();
+      setEventName(eventData?.name ?? null);
+    } else {
+      setEventName(null);
+      setTeamMembers([]);
+    }
 
-      if (!setlist) {
-        router.push("/setlists");
-        return;
-      }
+    if (setlist.event_id) {
+      const { data: members } = await supabase
+        .from("event_members")
+        .select("*, profiles(*)")
+        .eq("event_id", setlist.event_id);
 
-      setSetlistName(setlist.name);
-      setTitleValue(setlist.name);
-      setEventId(setlist.event_id);
+      setTeamMembers((members as unknown as EventMemberWithProfile[]) ?? []);
+    }
 
-      // Load event name and team members if linked
-      if (setlist.event_id) {
-        const { data: eventData } = await supabase
-          .from("events")
-          .select("name")
-          .eq("id", setlist.event_id)
-          .single();
-        setEventName(eventData?.name ?? null);
-      } else {
-        setEventName(null);
-        setTeamMembers([]);
-      }
+    const { data: songsData } = await supabase
+      .from("songs")
+      .select("*, song_role_assignments(*)")
+      .eq("setlist_id", id)
+      .order("position", { ascending: true });
 
-      if (setlist.event_id) {
-        const { data: members } = await supabase
-          .from("event_members")
-          .select("*, profiles(*)")
-          .eq("event_id", setlist.event_id);
+    setSongs((songsData as SongWithRoles[]) ?? []);
 
-        setTeamMembers((members as unknown as EventMemberWithProfile[]) ?? []);
-      }
+    // Load setlist-level files
+    const { data: setlistFilesData } = await supabase
+      .from("files")
+      .select("*")
+      .eq("setlist_id", id)
+      .order("created_at", { ascending: false });
 
-      const { data: songsData } = await supabase
-        .from("songs")
-        .select("*, song_role_assignments(*)")
-        .eq("setlist_id", id)
-        .order("position", { ascending: true });
+    setSetlistFiles((setlistFilesData as FileRecord[]) ?? []);
+    setLoading(false);
+  }
 
-      setSongs((songsData as SongWithRoles[]) ?? []);
-
-      // Load setlist-level files
-      const { data: setlistFilesData } = await supabase
-        .from("files")
-        .select("*")
-        .eq("setlist_id", id)
-        .order("created_at", { ascending: false });
-
-      setSetlistFiles((setlistFilesData as FileRecord[]) ?? []);
-      setLoading(false);
-    },
-    [router]
-  );
-
-  const loadSongFiles = useCallback(async (songId: string) => {
+  async function loadSongFiles(songId: string) {
     const supabase = createClient();
     const { data } = await supabase
       .from("files")
@@ -237,23 +234,40 @@ export default function SetlistDetailPage({
       .order("created_at", { ascending: false });
 
     setSongFiles((data as FileRecord[]) ?? []);
-  }, []);
+  }
 
   useEffect(() => {
+    let ignore = false;
     params.then(({ id }) => {
-      setSetlistId(id);
-      loadSetlist(id);
+      if (!ignore) {
+        setSetlistId(id);
+        loadSetlist(id);
+      }
     });
-  }, [params, loadSetlist]);
+    return () => { ignore = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   // Load song files when selection changes
   useEffect(() => {
+    let ignore = false;
     if (selectedSongId) {
-      loadSongFiles(selectedSongId);
+      (async () => {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("files")
+          .select("*")
+          .eq("song_id", selectedSongId)
+          .order("created_at", { ascending: false });
+        if (!ignore) {
+          setSongFiles((data as FileRecord[]) ?? []);
+        }
+      })();
     } else {
       setSongFiles([]);
     }
-  }, [selectedSongId, loadSongFiles]);
+    return () => { ignore = true; };
+  }, [selectedSongId]);
 
   // ─── Setlist name handlers ───
 
@@ -786,6 +800,7 @@ export default function SetlistDetailPage({
           <ScrollArea className="h-full">
             {selectedSong ? (
               <SongDetail
+                key={selectedSong.id}
                 song={selectedSong}
                 isOrganiser={isOrganiser}
                 teamMembers={teamMembers}
@@ -829,6 +844,7 @@ export default function SetlistDetailPage({
           </div>
           <ScrollArea className="max-h-[50vh]">
             <SongDetail
+              key={selectedSong.id}
               song={selectedSong}
               isOrganiser={isOrganiser}
               teamMembers={teamMembers}
@@ -1239,7 +1255,7 @@ function SortableSongCard(props: SongCardProps) {
 function fileTypeIcon(type: string) {
   switch (type) {
     case "image":
-      return <Image className="w-4 h-4 text-purple-500" />;
+      return <ImageIcon className="w-4 h-4 text-purple-500" />;
     case "audio":
       return <Music className="w-4 h-4 text-green-500" />;
     default:
@@ -1287,17 +1303,6 @@ function SongDetail({
   const [newPersonName, setNewPersonName] = useState("");
 
   const roles = song.song_role_assignments ?? [];
-
-  // Reset local state when song changes
-  useEffect(() => {
-    setNameValue(song.name);
-    setBpmValue(String(song.bpm));
-    setNotesValue(song.arrangement_notes);
-    setEditingName(false);
-    setEditingBpm(false);
-    setEditingNotes(false);
-    setAddingRole(false);
-  }, [song.id, song.name, song.bpm, song.arrangement_notes]);
 
   function handlePersonSelect(value: string) {
     if (value === "custom") {
