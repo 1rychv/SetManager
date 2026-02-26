@@ -640,12 +640,11 @@ export default function SetlistDetailPage({
           </div>
         </div>
         {isOrganiser && (
-          <div className="flex items-center gap-2 overflow-x-auto pl-11 md:pl-11">
+          <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:pl-11">
             {eventId ? (
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0"
                 onClick={handleDetachEvent}
               >
                 <Unlink className="w-4 h-4 mr-1" />
@@ -655,37 +654,37 @@ export default function SetlistDetailPage({
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0"
                 onClick={openAttachDialog}
               >
                 <Link2 className="w-4 h-4 mr-1" />
                 Attach to Event
               </Button>
             )}
-            <Button size="sm" className="shrink-0" onClick={() => setAddDialogOpen(true)}>
+            <Button size="sm" onClick={() => setAddDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-1" />
               Add Song
             </Button>
             {eventId && (
-              <Button variant="outline" size="sm" className="shrink-0" onClick={openAddPerformerDialog}>
+              <Button variant="outline" size="sm" onClick={openAddPerformerDialog}>
                 <MicVocal className="w-4 h-4 mr-1" />
                 Add Performer
               </Button>
             )}
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="text-destructive hover:text-destructive shrink-0"
+              className="text-destructive hover:text-destructive"
               onClick={() => setDeleteDialogOpen(true)}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete
             </Button>
           </div>
         )}
 
         {/* Setlist-level files */}
         {(setlistFiles.length > 0 || isOrganiser) && (
-          <div className="flex items-center gap-2 overflow-x-auto pl-11 md:pl-11">
+          <div className="flex items-center justify-center gap-2 flex-wrap md:justify-start md:pl-11">
             <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             {setlistFiles.length === 0 ? (
               <span className="text-xs text-muted-foreground">No setlist files</span>
@@ -733,8 +732,8 @@ export default function SetlistDetailPage({
         )}
       </div>
 
-      {/* Two-panel layout */}
-      <div className="flex flex-1 min-h-0">
+      {/* Two-panel layout (hidden on mobile when detail is open) */}
+      <div className={`flex flex-1 min-h-0 ${selectedSongId ? "hidden md:flex" : ""}`}>
         {/* Left panel — Song list */}
         <div className="w-full md:w-[55%] border-r border-border flex flex-col">
           <ScrollArea className="flex-1">
@@ -828,10 +827,10 @@ export default function SetlistDetailPage({
         </div>
       </div>
 
-      {/* Mobile: detail shown below when selected */}
+      {/* Mobile: detail replaces song list when selected */}
       {selectedSong && (
-        <div className="md:hidden border-t border-border">
-          <div className="flex items-center justify-between px-4 py-2 bg-muted/50">
+        <div className="md:hidden flex flex-col flex-1 min-h-0">
+          <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border shrink-0">
             <span className="text-sm font-medium">{selectedSong.name}</span>
             <Button
               variant="ghost"
@@ -842,25 +841,23 @@ export default function SetlistDetailPage({
               <X className="w-4 h-4" />
             </Button>
           </div>
-          <ScrollArea className="max-h-[50vh]">
-            <SongDetail
-              key={selectedSong.id}
-              song={selectedSong}
-              isOrganiser={isOrganiser}
-              teamMembers={teamMembers}
-              files={songFiles}
-              onUpdate={(updates) =>
-                handleUpdateSong(selectedSong.id, updates)
-              }
-              onAddRole={(role, personId, personName) =>
-                handleAddRole(selectedSong.id, role, personId, personName)
-              }
-              onRemoveRole={handleRemoveRole}
-              onAttachFile={() => openAttachFileDialog("song")}
-              onDetachFile={handleDetachFileFromSong}
-              onDownloadFile={handleDownloadFile}
-            />
-          </ScrollArea>
+          <SongDetail
+            key={selectedSong.id}
+            song={selectedSong}
+            isOrganiser={isOrganiser}
+            teamMembers={teamMembers}
+            files={songFiles}
+            onUpdate={(updates) =>
+              handleUpdateSong(selectedSong.id, updates)
+            }
+            onAddRole={(role, personId, personName) =>
+              handleAddRole(selectedSong.id, role, personId, personName)
+            }
+            onRemoveRole={handleRemoveRole}
+            onAttachFile={() => openAttachFileDialog("song")}
+            onDetachFile={handleDetachFileFromSong}
+            onDownloadFile={handleDownloadFile}
+          />
         </div>
       )}
 

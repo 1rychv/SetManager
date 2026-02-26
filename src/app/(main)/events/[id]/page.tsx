@@ -457,35 +457,33 @@ export default function EventDetailPage() {
 
           {/* Open Mic section */}
           {event.open_mic_enabled && (
-            <div className="p-4 rounded-xl border bg-purple-50/50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800">
-              <div className="flex items-center justify-between">
-                <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                  Open Mic Enabled
-                </Badge>
-                <div className="flex gap-2">
-                  {isOrganiser && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => router.push("/open-mic")}
-                    >
-                      View Applications
-                    </Button>
-                  )}
+            <div className="p-4 rounded-xl border bg-purple-50/50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800 space-y-3">
+              <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                Open Mic Enabled
+              </Badge>
+              <div className="grid grid-cols-2 gap-2">
+                {isOrganiser && (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      window.open(`/lineup/${event.slug}`, "_blank")
-                    }
+                    onClick={() => router.push("/open-mic")}
                   >
-                    View Lineup
+                    View Applications
                   </Button>
-                  <Button size="sm" variant="outline" onClick={copyPublicLink}>
-                    <Copy className="w-3.5 h-3.5 mr-1.5" />
-                    Copy Link
-                  </Button>
-                </div>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    window.open(`/lineup/${event.slug}`, "_blank")
+                  }
+                >
+                  View Lineup
+                </Button>
+                <Button size="sm" variant="outline" className="col-span-2" onClick={copyPublicLink}>
+                  <Copy className="w-3.5 h-3.5 mr-1.5" />
+                  Copy Link
+                </Button>
               </div>
             </div>
           )}
@@ -529,7 +527,7 @@ export default function EventDetailPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <Badge
                         variant="outline"
                         className={rsvpColor(member.rsvp)}
