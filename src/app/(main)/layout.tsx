@@ -61,7 +61,7 @@ export default function MainLayout({
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-dvh items-center justify-center bg-background">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
@@ -78,7 +78,7 @@ export default function MainLayout({
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-dvh bg-background overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -89,7 +89,7 @@ export default function MainLayout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-200 ${
+        className={`fixed md:static top-0 left-0 h-dvh z-50 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-200 ${
           sidebarOpen
             ? "translate-x-0"
             : "-translate-x-full md:translate-x-0"
@@ -209,7 +209,7 @@ export default function MainLayout({
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar - Mobile */}
-        <header className="md:hidden flex items-center h-14 px-4 border-b bg-background shrink-0">
+        <header className="md:hidden flex items-center h-14 px-4 border-b bg-background shrink-0 sticky top-0 z-30">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-foreground mr-3"
